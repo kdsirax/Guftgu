@@ -1,6 +1,7 @@
 import React from 'react'
 import Sidebar from '../components/Sidebar'
 import Chat from '../components/Chat'
+import CallOverlay from '../components/CallOverlay'
 
 const Home = () => {
   return (
@@ -9,6 +10,7 @@ const Home = () => {
         <Sidebar />
         <Chat />
       </div>
+      <CallOverlay />
     </div>
   )
 }

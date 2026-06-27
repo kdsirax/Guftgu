@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import Add from "../img/addAvatar.png";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { createUserWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { auth, storage, db } from "../firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { doc, setDoc } from "firebase/firestore"; 
+import { doc, setDoc, getDoc } from "firebase/firestore"; 
 import { Link, useNavigate } from 'react-router-dom';
 
 const Register = () => {
@@ -20,36 +20,65 @@ const Register = () => {
     try {
       const res = await createUserWithEmailAndPassword(auth, email, password);
 
-      // create a unique image name 
-      const date = new Date().getTime();
-      const storageRef = ref(storage, `${displayName + date}`);
+      let downloadURL = "https://api.dicebear.com/7.x/adventurer/svg?seed=" + encodeURIComponent(displayName);
 
-      await uploadBytesResumable(storageRef, file).then(() => {
-          getDownloadURL(storageRef).then(async(downloadURL) => {
-            try {
-              // Update Profile 
-              await updateProfile(res.user,{
-                displayName,
-                photoURL: downloadURL,
-              });
-              // Create user on firestore 
-              await setDoc(doc(db, "users", res.user.uid),{
-                uid: res.user.uid,
-                displayName,
-                email,
-                photoURL: downloadURL,
-              });
-              
-              await setDoc(doc(db, "userChats", res.user.uid), {});
-              navigate("/");
+      if (file) {
+        // create a unique image name 
+        const date = new Date().getTime();
+        const storageRef = ref(storage, `${displayName + date}`);
+        const uploadTask = await uploadBytesResumable(storageRef, file);
+        downloadURL = await getDownloadURL(uploadTask.ref);
+      }
 
-            } catch (err) {
-              console.log(err);
-              setErr(true);
-            }
-          });
-        });
+      // Update Profile 
+      await updateProfile(res.user,{
+        displayName,
+        photoURL: downloadURL,
+      });
+
+      // Create user on firestore 
+      await setDoc(doc(db, "users", res.user.uid),{
+        uid: res.user.uid,
+        displayName,
+        email,
+        photoURL: downloadURL,
+      });
+      
+      await setDoc(doc(db, "userChats", res.user.uid), {});
+      navigate("/");
+
     } catch (err) {
+      console.log(err);
+      setErr(true);
+    }
+  };
+
+  const handleGoogleAuth = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Check if user document exists in Firestore
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (!userDoc.exists()) {
+        // Create user on firestore 
+        await setDoc(userDocRef, {
+          uid: user.uid,
+          displayName: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL || "https://api.dicebear.com/7.x/adventurer/svg?seed=" + encodeURIComponent(user.displayName),
+        });
+
+        // Initialize userChats
+        await setDoc(doc(db, "userChats", user.uid), {});
+      }
+
+      navigate("/");
+    } catch (err) {
+      console.error(err);
       setErr(true);
     }
   };
@@ -73,6 +102,9 @@ const Register = () => {
             <span>Add an avatar</span>
           </label>
           <button>Sign Up</button>
+          <button type="button" className="googleBtn" onClick={handleGoogleAuth}>
+            Sign Up with Google
+          </button>
           {err && (
             <span style={{ color: "red", fontSize: "12px" }}>
               Something went Wrong!
